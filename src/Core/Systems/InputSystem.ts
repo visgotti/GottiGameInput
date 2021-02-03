@@ -1,4 +1,4 @@
-import { ActionStateDatumChange, AddInputIdActionMapEvent, RemoveInputIdActionMapEvent, MappedActionToInputState, UpdatedSystemActionState } from "../types";
+import { ActionStateDatumChange, AddInputIdActionMapEvent, RemoveInputIdActionMapEvent, MappedActionToInputState, UpdatedSystemActionState, StickAngleState, MappedInputToActionStates } from "../types";
 
 type ActionState = {[actionName: string]: boolean | number }
 
@@ -9,10 +9,10 @@ export abstract class InputSystem {
     protected _onMappedActionAddedListeners: Array<(event: AddInputIdActionMapEvent) => void> = [];
     protected _onMappedActionRemovedListeners: Array<(event: RemoveInputIdActionMapEvent) => void> = [];
 
-    readonly actionState: {[actionName: string]: boolean } = {};
+    readonly actionState: {[actionName: string]: boolean | number | string | StickAngleState } = {};
     private actionNames: Array<string> = [];
 
-    protected mappedInputIdToActions: MappedActionToInputState = {};
+    protected mappedInputIdToActions: MappedInputToActionStates = {};
     protected mappedActionToInputIds: MappedActionToInputState = {};
   //   protected mappedActionToOrderedInputCombos : {[action: string]: Array<string>}
   //  protected mappedActionToUnorderedInputCombos : {[action: string]: Array<string>}
@@ -21,7 +21,7 @@ export abstract class InputSystem {
     constructor(mappedActionToInputIds?: MappedActionToInputState) {
         mappedActionToInputIds && this.applyActionToInputMap(mappedActionToInputIds);
     }
-    protected applyActionToInputMap(mappedActionToInputIds: {[action: string]: Array<string> }) {
+    protected applyActionToInputMap(mappedActionToInputIds: {[action: string]: Array<string | number> }) {
         if(!this.validateActionToInputMap(mappedActionToInputIds)) throw new Error(`Invalid.`);
         for(let action in mappedActionToInputIds) {
             this.addActionState(action, false);
@@ -33,7 +33,7 @@ export abstract class InputSystem {
     public getMappedActionInputs() : MappedActionToInputState {
         return { ...this.mappedActionToInputIds };
     }
-    private validateActionToInputMap(mappedActionToInputIds: {[action: string]: Array<string> }) : boolean {
+    private validateActionToInputMap(mappedActionToInputIds: {[action: string]: Array<string | number> }) : boolean {
         //todo:... make sure nothing gets removed when it shouldnt.
         return true;
     }
@@ -48,13 +48,17 @@ export abstract class InputSystem {
             const curAction = this.actionNames[i];
             const previous = prevState[curAction];
             const current = this.actionState[curAction]
-            if(previous !== current) {
+            if(
+                (typeof current !== 'object' && previous !== current) ||
+                // @ts-ignore
+                (current.power !== previous?.power || current.angles?.default.degrees !== previous.angles?.default.degrees)) {
                 changed = changed || {};
                 const changeObj = { previous, current };
-                changed[curAction] = changeObj;
+                changed[curAction] = changeObj ;
                 this._onActionListeners[curAction]?.forEach(l => l(changeObj));
             }
         }
+        // @ts-ignore
         return { state: this.actionState, changed };
     }
 
@@ -111,7 +115,13 @@ export abstract class InputSystem {
         return this._onMappedActionRemovedListeners.length;
     }
 
-    protected unmapInputFromAction(inputId: string, action: string) : RemoveInputIdActionMapEvent {
+    protected unmapInputFromAction(inputId: string | Array<string>, action: string) : RemoveInputIdActionMapEvent {
+        if(Array.isArray(inputId)) {
+            inputId.forEach(i => {
+                this.unmapInputFromAction(i, action);
+            });
+            return;
+        }
         const actions = this.mappedInputIdToActions[inputId];
         if(typeof actions === 'undefined') {
             throw new Error(`The inputId ${inputId} was not mapped to any action.`)
@@ -135,27 +145,39 @@ export abstract class InputSystem {
         return eventData;
     }
 
-    protected mapInputIdToAction(inputId: string, action: string) : AddInputIdActionMapEvent{
-        const eventData : AddInputIdActionMapEvent = { action, inputId };
-        const cur = this.mappedInputIdToActions[inputId];
-        if(cur?.includes(action)) return;
-        if(!this.mappedInputIdToActions[inputId]) {
-            this.mappedInputIdToActions[inputId] = [action];
-        } else {
-            this.mappedInputIdToActions[inputId].push(action);
+    protected mapInputIdToAction(inputId: string | number | Array<string | number>, action: string | Array<string>) : AddInputIdActionMapEvent{
+        if(Array.isArray(inputId)) {
+            inputId.forEach(i => {
+                this.mapInputIdToAction(i, action);
+            });
+            return;
         }
-        if(!this.mappedActionToInputIds[action]) {
-            this.mappedActionToInputIds[action] = [inputId];
+        if(Array.isArray(action)) {
+            action.forEach(a => {
+                this.mapInputIdToAction(inputId, a);
+            });
+        }
+        this.actionState[action as string] = false;
+        const eventData : AddInputIdActionMapEvent = { action: action as string, inputId };
+        const cur = this.mappedInputIdToActions[inputId];
+        if(cur?.includes(action as string)) return;
+        if(!this.mappedInputIdToActions[inputId]) {
+            this.mappedInputIdToActions[inputId] = [action as string];
         } else {
-            this.mappedActionToInputIds[action].push(inputId);
+            this.mappedInputIdToActions[inputId].push(action as string);
+        }
+        if(!this.mappedActionToInputIds[action as string]) {
+            this.mappedActionToInputIds[action as string] = [inputId];
+        } else {
+            this.mappedActionToInputIds[action as string].push(inputId);
         }
         this._onMappedActionAddedListeners.forEach(l => l(eventData));
         return eventData;
     }
-    protected resolveActions(inputId: string) : Array<string> {
+    protected resolveActions(inputId: string | number) : Array<string> {
         return this.mappedInputIdToActions[inputId];
     }
-    protected resolveInputs(action: string) : Array<string> {
+    protected resolveInputs(action: string) : Array<string | number> {
         return this.mappedActionToInputIds[action];
     }
     public getDuplicateInputs() : MappedActionToInputState {

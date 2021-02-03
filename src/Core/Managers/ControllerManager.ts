@@ -91,7 +91,7 @@ export class ControllerManager extends BaseManager {
         }
     }
     private controllerSystemFactory(g: Gamepad) : DefaultController {
-        const system = new DefaultController(g, this.state);
+        const system = new DefaultController(g, this.state.default);
         return system;
     }
 }

@@ -1,17 +1,17 @@
-import { ActionStateDatumChange, AddInputIdActionMapEvent, RemoveInputIdActionMapEvent, MappedActionToInputState, UpdatedSystemActionState } from "../types";
+import { ActionStateDatumChange, AddInputIdActionMapEvent, RemoveInputIdActionMapEvent, MappedActionToInputState, UpdatedSystemActionState, StickAngleState, MappedInputToActionStates } from "../types";
 export declare abstract class InputSystem {
     private _onActionListeners;
     protected _onMappedActionAddedListeners: Array<(event: AddInputIdActionMapEvent) => void>;
     protected _onMappedActionRemovedListeners: Array<(event: RemoveInputIdActionMapEvent) => void>;
     readonly actionState: {
-        [actionName: string]: boolean;
+        [actionName: string]: boolean | number | string | StickAngleState;
     };
     private actionNames;
-    protected mappedInputIdToActions: MappedActionToInputState;
+    protected mappedInputIdToActions: MappedInputToActionStates;
     protected mappedActionToInputIds: MappedActionToInputState;
     constructor(mappedActionToInputIds?: MappedActionToInputState);
     protected applyActionToInputMap(mappedActionToInputIds: {
-        [action: string]: Array<string>;
+        [action: string]: Array<string | number>;
     }): void;
     getMappedActionInputs(): MappedActionToInputState;
     private validateActionToInputMap;
@@ -28,9 +28,9 @@ export declare abstract class InputSystem {
     offMappedActionAdded(cb: (payload: AddInputIdActionMapEvent) => void): number;
     onMappedActionRemoved(cb: (event: RemoveInputIdActionMapEvent) => void): number;
     offMappedActionRemoved(cb: (payload: RemoveInputIdActionMapEvent) => void): number;
-    protected unmapInputFromAction(inputId: string, action: string): RemoveInputIdActionMapEvent;
-    protected mapInputIdToAction(inputId: string, action: string): AddInputIdActionMapEvent;
-    protected resolveActions(inputId: string): Array<string>;
-    protected resolveInputs(action: string): Array<string>;
+    protected unmapInputFromAction(inputId: string | Array<string>, action: string): RemoveInputIdActionMapEvent;
+    protected mapInputIdToAction(inputId: string | number | Array<string | number>, action: string | Array<string>): AddInputIdActionMapEvent;
+    protected resolveActions(inputId: string | number): Array<string>;
+    protected resolveInputs(action: string): Array<string | number>;
     getDuplicateInputs(): MappedActionToInputState;
 }

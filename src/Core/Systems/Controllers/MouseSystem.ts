@@ -28,11 +28,11 @@ export class MouseSystem extends InputSystem {
     private handleMouseMove(event: MouseEvent) {
     }
     private handleMouseDown(event: MouseEvent) {
-        const actions = this.resolveActions(`${event.button}`);
+        const actions = this.resolveActions(event.button);
         actions &&  this.actionsStarted.push(...actions);
     }
     private handleMouseUp(event: MouseEvent) {
-        const actions = this.resolveActions(`${event.button}`);
+        const actions = this.resolveActions(event.button);
         actions && this.actionsFinished.push(...actions);
     }
     public onClear(): void {

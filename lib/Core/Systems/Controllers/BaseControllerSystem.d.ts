@@ -18,10 +18,12 @@ declare type FormattedStickActionLookup = {
         actions: Array<string>;
     }>;
 };
-export declare class BaseControllerSystem extends InputSystem {
+export declare abstract class BaseControllerSystem extends InputSystem {
     gamepad: Gamepad;
     private buttonIndexIdMap;
-    private stickActionCount;
+    stickActionCount: {
+        [action: string]: number;
+    };
     private _onMappedStickActionAddedListeners;
     private _onMappedStickActionRemovedListeners;
     readonly mappedStickRotationActions: {
@@ -42,10 +44,19 @@ export declare class BaseControllerSystem extends InputSystem {
         press: Array<FormattedStickActionLookup>;
         move: Array<FormattedStickActionLookup>;
     };
+    readonly trackedStickActions: Array<{
+        press: Array<string>;
+        move: Array<string>;
+    }>;
     constructor(gamepad: Gamepad, state: any);
     onClear(): void;
+    protected wasTrueLookup: {
+        [action: string]: boolean;
+    };
+    abstract isPowerBtn(buttonIndex: number): boolean;
+    abstract isStickPressed(stickIndex: number): boolean;
+    abstract applyControllerState(state: any): void;
     protected mapStickRangeToAction(axesIndex: number, start: number, end: number, callback: (StickEvent: any) => void): void;
-    isStickPressed(stickIndex: number): boolean;
     protected unmapInputFromAction(inputId: string, action: string): RemoveInputIdActionMapEvent;
     unmapStickFromAction(stickIndex: number, stickAction: StickAction, press: boolean): void;
     private actionIsMapped;
@@ -53,8 +64,8 @@ export declare class BaseControllerSystem extends InputSystem {
     private validateStickActionType;
     private updateStickActionCount;
     mapStickToAction(stickIndex: number, stickAction: StickAction, press: boolean): void;
-    private makeButtonId;
     updateState(): void;
     private validateMinMax;
+    protected updateStickState(angles: any, power: any, direction: string, stickMap: FormattedStickActionLookup): void;
 }
 export {};

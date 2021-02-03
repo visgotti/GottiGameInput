@@ -41,6 +41,27 @@ const options = {
         label: 'Controller',
         inputHandler: (inputState, delta) => {
             const { controller } = inputState;
+            if(controller[0] && controller[0].state) {
+                const { red, green, purple, orange, pink, black } = controller[0].state;
+                console.log({ red, green, purple, orange, pink, black });
+                if((red && green)) {
+                    redrawPlayer(0x0000ff);
+                } else if (green) {
+                    redrawPlayer(0x00ff00);
+                } else if(red) {
+                    redrawPlayer(0xff0000);
+                } else if (orange) {
+                    redrawPlayer(0xfcba03)
+                } else if (pink) {
+                    redrawPlayer(0xd0b3ff)
+                } else if (purple) {
+                    redrawPlayer(0x6613ed)
+                } else if (black) {
+                    redrawPlayer(0x000000)
+                } else {
+                    redrawPlayer(0x0000ff)
+                }
+            }
             controller[0] && updatePlayerPosition(controller[0].state, delta);
         }
     },
@@ -100,12 +121,18 @@ const renderer = PIXI.autoDetectRenderer({
 });
 
 const player = new PIXI.Graphics();
-player.beginFill(0x0000bb);
-player.drawCircle(0, 10, 10);
+const redrawPlayer = (color, outlineColor) => {
+    player.clear();
+    player.beginFill(color);
+    if(outlineColor) {
+        player.lineStye(outlineColor, 2)
+    }
+    player.drawCircle(0, 10, 10);
+}
+redrawPlayer(0x0000bb)
 player.x = halfScreenWidth + halfScreenWidth/2 - player.width/2
 player.y = halfScreenHeight - player.height/2
 stage.addChild(player);
-
 
 const gameInput = new GottiGameInput(
     {
@@ -118,19 +145,28 @@ const gameInput = new GottiGameInput(
         controller: {
             default: {
                 buttons: {
-                    'shoot': 0,
+                    'north': 'shoot',
+                },
+                triggers: {
+                    l2: 'shootHold'
+                },
+                dpad: {
+                    north: 'purple',
+                    south: 'orange',
+                    west: 'pink',
+                    east: 'black',
                 },
                 sticks: {
+                    leftPress: 'red',
+                    rightPress: 'green',
                     left: {
-                        'moveLeft': {min: 125, max: 315 },
-                        'moveRight': {min: 45, max: 135},
-                        'moveDown': { min: 135, max: 225 },
-                        'moveUp': { min:145, max: 315}
-                    }
+                        'moveLeft': {min: 225-22.5, max: 315+22.5 },
+                        'moveRight': {min: 45-22.5, max: 135+22.5},
+                        'moveDown': { min: 135-22.5, max: 225+22.5 },
+                        'moveUp': [{ min:315-22.5, max: 360 }, { min: 0, max: 45+22.5 }]
+                    },
                 }
             },
-            xbox: {
-            }
         }
     }
 );

@@ -1,6 +1,8 @@
 import { InputSystem } from "../InputSystem";
 import { StickAction, AddInputIdActionMapEvent, RemoveInputIdActionMapEvent, RangedStickAction, StickInputId } from "../../types";
-import { isValidDirection } from "../../../utils";
+import { isValidDirection, getDirectionFromNorth0Degrees } from "../../../utils";
+
+
 
 type FormattedStickActionLookup = {
     actions?: Array<string>,
@@ -17,11 +19,11 @@ type FormattedStickActionLookup = {
     degreeDirections?: Array<{ min: number, max: number, actions: Array<string> }>
 }
 
-export class BaseControllerSystem extends InputSystem {
+export abstract class BaseControllerSystem extends InputSystem {
     public gamepad: Gamepad;
     private buttonIndexIdMap: Array<string>;
 
-    private stickActionCount: {[action: string] : number } = {}
+    public stickActionCount: {[action: string] : number } = {}
 
     private _onMappedStickActionAddedListeners: Array<(event: StickAction) => void> = [];
     private _onMappedStickActionRemovedListeners: Array<(event: StickAction) => void> = [];
@@ -30,17 +32,20 @@ export class BaseControllerSystem extends InputSystem {
     readonly mappedStickRotationActions: {[stickIndex: number]: Array<{ start: number, end: number, callback: (rotation: number, power: number) => void }>} = {};
     readonly mappedAxesActions: {[axesIndex: number]: Array<{ start: number, end: number, callback: (rotation: number) => void }>} = {};
     readonly mappedStickActions: { press: Array<FormattedStickActionLookup>, move: Array<FormattedStickActionLookup> } = { press: [], move: [] };
-
+    readonly trackedStickActions: Array<{ press: Array<string>, move: Array<string> }> = [];
     constructor(gamepad: Gamepad, state: any) {
         super();
         this.gamepad = gamepad;
     }
     public onClear(): void {}
+
+    protected wasTrueLookup: {[action: string]: boolean } = {};
+
+    public abstract isPowerBtn(buttonIndex: number) : boolean;
+    public abstract isStickPressed (stickIndex: number) : boolean;
+    public abstract applyControllerState (state: any) : void;
     protected mapStickRangeToAction(axesIndex: number, start: number, end: number, callback: (StickEvent) => void) {
         this.mappedStickRotationActions[axesIndex]
-    }
-    public isStickPressed(stickIndex: number) : boolean {
-        return false;
     }
     protected unmapInputFromAction(inputId: string, action: string) : RemoveInputIdActionMapEvent {
         const actions = this.mappedInputIdToActions[inputId];
@@ -153,7 +158,7 @@ export class BaseControllerSystem extends InputSystem {
         return type
     }
 
-    private updateStickActionCount(action: string, add: boolean) {
+    private updateStickActionCount(action: string, add: boolean, press?: boolean) {
         if(add) {
             if(!this.stickActionCount[action]) {
                 this.stickActionCount[action] = 1;
@@ -169,10 +174,9 @@ export class BaseControllerSystem extends InputSystem {
     }
 
     public mapStickToAction(stickIndex: number, stickAction: StickAction, press: boolean) {
-        console.error('mapping', stickIndex, stickAction);
         if(Array.isArray(stickAction)) {
             stickAction.forEach(a => {
-                this.mapStickToAction(stickIndex, stickAction, press);
+                this.mapStickToAction(stickIndex, a, press);
             })
             return;
         }
@@ -233,22 +237,32 @@ export class BaseControllerSystem extends InputSystem {
             })
         }
     }
-
-    private makeButtonId(btnIndex: number) : string {
-        return `button_${btnIndex}`
-    }
     public updateState(): void {
+        this.wasTrueLookup = {};
         this.gamepad.buttons.forEach((b, i) => {
-            const resolvedBtnActions = super.resolveActions(this.makeButtonId(i));
-            resolvedBtnActions?.forEach(a => {
-                super.actionState[a] = b.pressed;
-            })
+            const resolvedBtnActions = this.resolveActions(i);
+            console.log('resolved was', resolvedBtnActions);
+            if(!resolvedBtnActions) return;
+            if(this.isPowerBtn(i)) {
+                resolvedBtnActions.forEach(a => {
+                  //  console.error('setting state', a, 'to be', b.value)
+                    this.actionState[a] = b.value
+                    this.wasTrueLookup[a] = true;
+                })
+            } else {
+                resolvedBtnActions.forEach(a => {
+                //    console.error('setting state', a, 'to be', b.pressed)
+                    this.actionState[a] = b.pressed;
+                    if(b.pressed) {
+                        this.wasTrueLookup[a] = true;
+                    }
+                })
+            }
         });
     }
     private validateMinMax(min?: number, max?: number) {
         const hasMin =min !== undefined && min !== null;
         const hasMax = max !== undefined && max !== null;
-
         if(hasMin) {
             if(min < 0 || min > 360) {
                 throw new Error(`Invalid degree value, must be 0-360`)
@@ -262,6 +276,44 @@ export class BaseControllerSystem extends InputSystem {
         if(hasMax && hasMin) {
             if(min >= max) {
                 throw new Error(`Min should be less than max.`)
+            }
+        }
+    }
+
+    protected updateStickState(angles, power, direction: string, stickMap: FormattedStickActionLookup) {
+        const { degrees } = angles.north0;
+        const dir = getDirectionFromNorth0Degrees(degrees);
+        if(stickMap.actions) {
+            stickMap.actions.forEach(a => {
+                this.actionState[a] = { angles, power }
+            })
+        }
+        if(stickMap.stringDirections) {
+            const keys = Object.keys(stickMap.stringDirections);
+            keys.forEach(k => {
+                stickMap.stringDirections[k].forEach(a => {
+                    const wasValid = k === dir;
+                    if(wasValid && !this.wasTrueLookup[a]) {
+                        this.wasTrueLookup[a] = true;
+                        this.actionState[a] = true;
+                    } else if (!wasValid && !this.wasTrueLookup[a]) {
+                        this.actionState[a] = false;
+                    }
+                })
+            });
+        }
+        if(stickMap.degreeDirections) {
+            for(let i = 0; i < stickMap.degreeDirections.length; i++) {
+                const d = stickMap.degreeDirections[i];
+                const wasValid = (!d.min || d.min <= degrees) && (!d.max || d.max >= degrees);
+                d.actions.forEach(a => {
+                    if(wasValid && !this.wasTrueLookup[a]) {
+                        this.wasTrueLookup[a] = true;
+                        this.actionState[a] = true;
+                    } else if (!wasValid && !this.wasTrueLookup[a]) {
+                        this.actionState[a] = false;
+                    }
+                })
             }
         }
     }
